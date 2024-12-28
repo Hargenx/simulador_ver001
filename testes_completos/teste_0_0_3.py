@@ -51,6 +51,7 @@ class Agente:
     patrimonio: List[float] = field(default_factory=list)
     tau: int = field(init=False)
     volatilidade_percebida: float = field(default=0.0, init=False)
+    vizinhos: List["Agente"] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """

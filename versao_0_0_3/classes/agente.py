@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .mercado import Mercado
     from .order_book import OrderBook
     from .fundo_imobiliario import FundoImobiliario
-    
+
 from .ordem import Ordem
 import numpy as np
 
@@ -46,19 +46,21 @@ class Agente:
         volatilidade_percebida (float): Volatilidade percebida pelo agente com base
             no histórico de preços.
     """
+
     nome: str
     saldo: float
     carteira: Dict[str, int]
     sentimento: float
     expectativa: List[float]
-    conhecimento: str
-    literacia_financeira: (float)
-    comportamento_especulador: (float)
+    literacia_financeira: float
+    comportamento_especulador: float
     comportamento_ruido: float
+    comportamento_fundamentalista: float
     expectativa_inflacao: float
     patrimonio: List[float] = field(default_factory=list)
     tau: int = field(init=False)
     volatilidade_percebida: float = field(default=0.0, init=False)
+    vizinhos: List["Agente"] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """
@@ -72,6 +74,8 @@ class Agente:
             None
         """
         self.tau = random.randint(22, 252)  # Sorteio do tempo observado.
+        if not (0 <= self.literacia_financeira <= 1):
+            raise ValueError("literacia_financeira deve estar entre 0 e 1.")
 
     def calcular_volatilidade_percebida(self, historico_precos: List[float]) -> None:
         """
@@ -93,7 +97,7 @@ class Agente:
                 math.log(historico_precos[i] / historico_precos[i - 1])
                 for i in range(1, self.tau)
             ]
-            self.volatilidade_percebida = np.std(retornos)
+            self.volatilidade_percebida = np.std(retornos) * np.sqrt(252)  # Anualizado
         else:
             self.volatilidade_percebida = 0.0
 
@@ -110,14 +114,11 @@ class Agente:
         Returns:
             float: Valor do risco desejado pelo agente.
         """
-        risco_base = (
-            (self.sentimento + 1)
-            * self.volatilidade_percebida
-            / (2 + self.literacia_financeira)
-        )
+        risco_base = (self.sentimento + 1) * self.volatilidade_percebida / 2
         fator_especulacao = self.comportamento_especulador * 0.2
         fator_ruido = self.comportamento_ruido * 0.1
-        return risco_base + fator_especulacao - fator_ruido
+        fator_fundamentalista = self.comportamento_fundamentalista * 0.1  # Novo fator
+        return risco_base + fator_especulacao - fator_ruido + fator_fundamentalista
 
     def ajustar_preco_por_inflacao(self, preco: float) -> float:
         """
@@ -247,8 +248,10 @@ class Agente:
         """
         if self.vizinhos:
             l_privada_vizinhos = [
-                vizinho.calcula_l_privada() for vizinho in self.vizinhos
-                if len(vizinho.patrimonio) > 22  # Garante que o vizinho tenha histórico suficiente
+                vizinho.calcula_l_privada()
+                for vizinho in self.vizinhos
+                if len(vizinho.patrimonio)
+                > 22  # Garante que o vizinho tenha histórico suficiente
             ]
             if l_privada_vizinhos:  # Evita divisão por zero caso a lista fique vazia
                 return sum(l_privada_vizinhos) / len(l_privada_vizinhos)
@@ -329,15 +332,21 @@ class Agente:
         preco_ajustado = self.ajustar_preco_por_inflacao(preco_mercado)
         preco_expectativa = self.calcula_preco_expectativa(preco_ajustado)
         preco_expectativa += random.gauss(0, self.comportamento_ruido)
-        quantidade = max(
-            1,
-            int(
-                self.calcular_quantidade_baseada_em_risco(
-                    self.calcular_risco_desejado()
-                )
-            ),
-        )
-        tipo_ordem = "compra" if self.sentimento > 0 else "venda"
+        risco_desejado = self.calcular_risco_desejado()
+
+        if self.sentimento > 0:  # Compra
+            quantidade = min(
+                int(self.saldo / preco_expectativa),  # Limita pela capacidade de compra
+                max(1, int(self.calcular_quantidade_baseada_em_risco(risco_desejado))),
+            )
+            tipo_ordem = "compra"
+        else:  # Venda
+            quantidade = min(
+                self.carteira.get(ativo, 0),  # Limita pela quantidade na carteira
+                max(1, int(self.calcular_quantidade_baseada_em_risco(risco_desejado))),
+            )
+            tipo_ordem = "venda"
+
         return Ordem(tipo_ordem, self, ativo, preco_expectativa, quantidade)
 
     def atualiza_vizinhos(self, agentes: List["Agente"], max_vizinhos: int = 3) -> None:

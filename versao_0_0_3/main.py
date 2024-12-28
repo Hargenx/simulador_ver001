@@ -54,9 +54,9 @@ def main() -> None:
             carteira={"PETR4": random.randint(0, 50), "VALE3": random.randint(0, 50)},
             sentimento=random.uniform(-1, 1),
             expectativa=[40.0, 50.0, 60.0],
-            conhecimento=random.choice(["alto", "médio", "baixo"]),
             literacia_financeira=random.uniform(0, 1),
             comportamento_especulador=random.uniform(0, 1),
+            comportamento_fundamentalista=random.uniform(0, 1),
             comportamento_ruido=random.uniform(0, 1),
             expectativa_inflacao=random.uniform(-0.02, 0.05),
         )
