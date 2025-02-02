@@ -1,118 +1,235 @@
 import unittest
-import random
 import numpy as np
 
-from agente import Agente  # Certifique-se de ajustar o caminho conforme necessário
+from agente import Agente
+
+# Supondo que a classe Agente refatorada esteja disponível para importação.
+# Caso esteja no mesmo diretório, pode-se fazer:
+# from agente import Agente
+# Para este exemplo, assumiremos que a classe Agente já foi definida conforme o código refatorado.
+
+# =============================================================================
+# Classes Dummy para simular os objetos dependentes
+# =============================================================================
+
+
+class DummyFundoImobiliario:
+    def __init__(self, nome, historico_precos, dividendos=1.0):
+        self.nome = nome
+        self.historico_precos = historico_precos
+        self.dividendos = dividendos
+
+    def calcular_dividendos_cota(self):
+        return self.dividendos
+
+
+class DummyMercado:
+    def __init__(self, ativos, historico_precos, fundos_imobiliarios):
+        """
+        ativos: dict mapping asset name to current price.
+        historico_precos: dict mapping asset name to list of historical prices.
+        fundos_imobiliarios: dict mapping asset name to DummyFundoImobiliario.
+        """
+        self.ativos = ativos
+        self.historico_precos = historico_precos
+        self.fundos_imobiliarios = fundos_imobiliarios
+
+
+class DummyOrderBook:
+    def __init__(self):
+        self.ordens = []
+
+    def adicionar_ordem(self, ordem):
+        self.ordens.append(ordem)
+
+
+# Se necessário, podemos definir também um DummyOrdem,
+# mas como a classe Agente apenas instancia a ordem e a adiciona ao order book,
+# basta verificarmos se a ordem foi adicionada.
+
+# =============================================================================
+# Testes Unitários para a classe Agente
+# =============================================================================
+
+# Supondo que a classe Agente já esteja definida conforme a versão refatorada:
+# from agente import Agente
+# Para este exemplo, a classe Agente deve estar disponível no ambiente de testes.
 
 
 class TestAgente(unittest.TestCase):
+
     def setUp(self):
-        """
-        Configura um agente para ser utilizado nos testes.
-        """
-        random.seed(42)  # Fixando a semente para testes reprodutíveis
-        np.random.seed(42)
-        self.agente = Agente(
-            nome="Agente X",
+        # Cria um agente com parâmetros válidos
+        self.agent = Agente(
+            nome="Teste",
             saldo=10000.0,
-            carteira={"AAPL": 10, "MSFT": 5},
-            sentimento=0.5,
-            expectativa=[50, 100, 150],
-            literacia_financeira=0.7,
-            comportamento_fundamentalista=0.4,
-            comportamento_especulador=0.4,
-            comportamento_ruido=0.2,
+            carteira={"FII1": 10},
+            sentimento=0.0,
+            expectativa=[90, 100, 110],
+            literacia_financeira=0.5,
+            comportamento_fundamentalista=0.5,
+            comportamento_especulador=0.5,
+            comportamento_ruido=0.5,
             expectativa_inflacao=0.02,
         )
+        # Para garantir reprodutibilidade, fixamos tau para um valor conhecido
+        self.agent.tau = 22
 
-    def test_inicializacao(self):
-        """
-        Testa se o agente é inicializado corretamente.
-        """
-        self.assertEqual(self.agente.nome, "Agente X")
-        self.assertEqual(self.agente.saldo, 10000.0)
-        self.assertEqual(self.agente.carteira, {"AAPL": 10, "MSFT": 5})
-        self.assertTrue(0 <= self.agente.literacia_financeira <= 1)
-        self.assertTrue(-1 <= self.agente.sentimento <= 1)
-
-    def test_validacao_sentimento(self):
-        """
-        Testa se um valor inválido para sentimento levanta uma exceção.
-        """
+    def test_invalid_literacia_financeira(self):
         with self.assertRaises(ValueError):
             Agente(
-                nome="Erro",
-                saldo=5000.0,
+                nome="Invalid",
+                saldo=1000,
                 carteira={},
-                sentimento=2.0,  # Fora do intervalo permitido
-                expectativa=[10, 20, 30],
-                literacia_financeira=0.8,
+                sentimento=0,
+                expectativa=[0, 0, 0],
+                literacia_financeira=1.5,  # valor inválido (> 1)
                 comportamento_fundamentalista=0.5,
-                comportamento_especulador=0.3,
-                comportamento_ruido=0.2,
-                expectativa_inflacao=0.01,
+                comportamento_especulador=0.5,
+                comportamento_ruido=0.5,
+                expectativa_inflacao=0.02,
             )
 
-    def test_calculo_volatilidade(self):
-        """
-        Testa o cálculo da volatilidade percebida com um histórico de preços.
-        """
-        historico_precos = [100 + i for i in range(300)]  # Valores simulados
-        self.agente.calcular_volatilidade_percebida(historico_precos)
-        self.assertGreaterEqual(self.agente.volatilidade_percebida, 0)
+    def test_invalid_sentimento(self):
+        with self.assertRaises(ValueError):
+            Agente(
+                nome="Invalid",
+                saldo=1000,
+                carteira={},
+                sentimento=2,  # valor inválido (maior que 1)
+                expectativa=[0, 0, 0],
+                literacia_financeira=0.5,
+                comportamento_fundamentalista=0.5,
+                comportamento_especulador=0.5,
+                comportamento_ruido=0.5,
+                expectativa_inflacao=0.02,
+            )
 
-    def test_calculo_risco_desejado(self):
-        """
-        Testa o cálculo do risco desejado pelo agente.
-        """
-        self.agente.volatilidade_percebida = 0.2  # Simula um valor de volatilidade
-        risco = self.agente.calcular_risco_desejado()
-        self.assertGreaterEqual(risco, 0)
+    def test_calcular_volatilidade_percebida_insuficiente(self):
+        # Histórico de preços menor que tau: deve definir volatilidade como 0
+        historico_precos = [100] * (self.agent.tau - 1)
+        self.agent.calcular_volatilidade_percebida(historico_precos)
+        self.assertEqual(self.agent.volatilidade_percebida, 0.0)
 
-    def test_calculo_quantidade_baseada_em_risco(self):
-        """
-        Testa se o cálculo de quantidade baseada em risco retorna um valor coerente.
-        """
-        self.agente.volatilidade_percebida = 0.1
-        risco_desejado = self.agente.calcular_risco_desejado()
-        quantidade = self.agente.calcular_quantidade_baseada_em_risco(risco_desejado)
-        self.assertGreaterEqual(quantidade, 0)
+    def test_calcular_volatilidade_percebida_suficiente(self):
+        # Histórico com exatamente tau elementos (linearmente crescente)
+        historico_precos = np.linspace(100, 120, self.agent.tau).tolist()
+        self.agent.calcular_volatilidade_percebida(historico_precos)
+        self.assertGreater(self.agent.volatilidade_percebida, 0)
 
-    def test_atualizacao_patrimonio(self):
-        """
-        Testa a atualização do patrimônio do agente com preços de mercado.
-        """
-        precos_mercado = {"AAPL": 150, "MSFT": 300}
-        fundos_imobiliarios = {}
-        self.agente.atualizar_patrimonio(precos_mercado, fundos_imobiliarios)
-        self.assertGreater(len(self.agente.patrimonio), 0)
+    def test_calcular_risco_desejado(self):
+        # Configura volatilidade e sentimento
+        self.agent.volatilidade_percebida = 0.2
+        self.agent.sentimento = 0.5
+        risco = self.agent.calcular_risco_desejado()
+        expected = (0.5 + 1) * 0.2 / 2
+        self.assertAlmostEqual(risco, expected)
 
-    def test_calcula_I_privada(self):
-        """
-        Testa se o cálculo da taxa de crescimento do patrimônio retorna um valor válido.
-        """
-        self.agente.patrimonio = [
-            10000
-        ] * 23  # Simula 23 períodos de patrimônio estável
-        taxa = self.agente.calcula_I_privada()
-        self.assertEqual(taxa, 0.0)  # Como não houve crescimento, a taxa deve ser 0
+    def test_calcular_quantidade_baseada_em_risco(self):
+        self.agent.volatilidade_percebida = 0.2
+        risco_desejado = 0.3
+        quantidade = self.agent.calcular_quantidade_baseada_em_risco(risco_desejado)
+        expected = risco_desejado / 0.2
+        self.assertAlmostEqual(quantidade, expected)
 
-    def test_sorteia_news(self):
-        """
-        Testa se o sorteio de notícias gera um número válido.
-        """
-        news = self.agente.sorteia_news()
-        self.assertTrue(
-            -3 <= news <= 3
-        )  # Garante que está dentro do intervalo esperado
+    def test_calcular_preco_especulativo(self):
+        # Cria um fundo com histórico linearmente crescente
+        historico_precos = [100 + i for i in range(30)]
+        fundo = DummyFundoImobiliario("FII1", historico_precos)
+        self.agent.tau = 20  # Ajusta tau para o teste
+        preco_predito = self.agent.calcular_preco_especulativo(fundo)
+        # Em uma tendência linear, o preço predito deve ser maior que o último valor observado
+        self.assertGreater(preco_predito, historico_precos[-1])
+
+    def test_calcular_expectativa_preco(self):
+        historico_precos = [100 + i for i in range(30)]
+        fundo = DummyFundoImobiliario("FII1", historico_precos, dividendos=2.0)
+        self.agent.tau = 20
+        expectativa = self.agent.calcular_expectativa_preco(fundo)
+        # A expectativa não deve ser exatamente igual ao preço atual
+        self.assertNotEqual(expectativa, historico_precos[-1])
+
+    def test_tomar_decisao(self):
+        # Configura um mercado dummy com um ativo e fundo correspondente
+        historico_precos = [100 + i for i in range(30)]
+        fundo = DummyFundoImobiliario("FII1", historico_precos, dividendos=2.0)
+        ativos = {"FII1": historico_precos[-1]}
+        mercado = DummyMercado(
+            ativos=ativos,
+            historico_precos={"FII1": historico_precos},
+            fundos_imobiliarios={"FII1": fundo},
+        )
+        order_book = DummyOrderBook()
+        # Garante que o agente possua o ativo na carteira e defina um patrimônio inicial
+        self.agent.carteira = {"FII1": 10}
+        self.agent.patrimonio = [10000]
+        self.agent.tomar_decisao(mercado, order_book)
+        # Verifica se alguma ordem foi adicionada ao order book
+        self.assertGreater(len(order_book.ordens), 0)
+
+    def test_atualizar_patrimonio(self):
+        # Configura dados dummy para mercado e fundos
+        precos_mercado = {"Ativo1": 50}
+        historico_precos_fundo = [100 + i for i in range(30)]
+        fundo = DummyFundoImobiliario("FII1", historico_precos_fundo, dividendos=2.0)
+        fundos_imobiliarios = {"FII1": fundo}
+        self.agent.carteira = {"Ativo1": 10, "FII1": 5}
+        self.agent.saldo = 5000
+        self.agent.atualizar_patrimonio(precos_mercado, fundos_imobiliarios)
+        # Verifica se o patrimônio foi atualizado (lista não vazia)
+        self.assertTrue(len(self.agent.patrimonio) > 0)
+
+    def test_calcular_I_privada(self):
+        # Cria um histórico de patrimônio com mais de 22 registros
+        self.agent.patrimonio = [100 + i for i in range(30)]
+        I_privada = self.agent.calcular_I_privada()
+        expected = (self.agent.patrimonio[-1] / self.agent.patrimonio[-22]) - 1
+        self.assertAlmostEqual(I_privada, expected)
+
+    def test_calcular_I_social(self):
+        # Cria dois vizinhos com patrimônios conhecidos
+        neighbor1 = Agente(
+            nome="Vizinho1",
+            saldo=1000,
+            carteira={},
+            sentimento=0,
+            expectativa=[0, 0, 0],
+            literacia_financeira=0.5,
+            comportamento_fundamentalista=0.5,
+            comportamento_especulador=0.5,
+            comportamento_ruido=0.5,
+            expectativa_inflacao=0.02,
+        )
+        neighbor1.patrimonio = [100 + i for i in range(30)]
+        neighbor2 = Agente(
+            nome="Vizinho2",
+            saldo=1000,
+            carteira={},
+            sentimento=0,
+            expectativa=[0, 0, 0],
+            literacia_financeira=0.5,
+            comportamento_fundamentalista=0.5,
+            comportamento_especulador=0.5,
+            comportamento_ruido=0.5,
+            expectativa_inflacao=0.02,
+        )
+        neighbor2.patrimonio = [200 + i for i in range(30)]
+        self.agent.vizinhos = [neighbor1, neighbor2]
+        I_social = self.agent.calcular_I_social()
+        expected = (neighbor1.calcular_I_privada() + neighbor2.calcular_I_privada()) / 2
+        self.assertAlmostEqual(I_social, expected)
 
     def test_atualiza_sentimento(self):
-        """
-        Testa se a atualização do sentimento retorna um valor dentro do intervalo permitido.
-        """
-        sentimento = self.agente.atualiza_sentimento()
-        self.assertTrue(-1 <= sentimento <= 1)
+        # Para tornar o teste determinístico, sobrepõe sorteia_news para retornar valor fixo
+        self.agent.sorteia_news = lambda: 0.5
+        # Configura um histórico de patrimônio para calcular I_privada
+        self.agent.patrimonio = [100] * 30
+        self.agent.vizinhos = []  # Sem vizinhos para este teste
+        sentimento = self.agent.atualiza_sentimento()
+        # Verifica que o sentimento atualizado esteja dentro do intervalo [-1, 1]
+        self.assertGreaterEqual(sentimento, -1)
+        self.assertLessEqual(sentimento, 1)
 
 
 if __name__ == "__main__":
-    unittest.main(argv=["first-arg-is-ignored"], exit=False)
+    unittest.main()
